@@ -1,0 +1,41 @@
+edition: 3.0.0
+name: sidereus-backend
+access: default
+
+vars:
+  region: cn-hangzhou
+
+resources:
+  sidereus-api:
+    component: fc3
+    props:
+      region: ${vars.region}
+      functionName: sidereus-resume-api
+      description: AI 智能简历分析 API
+      runtime: custom
+      handler: not-used
+      timeout: 120
+      memorySize: 512
+      instanceConcurrency: 10
+      customRuntimeConfig:
+        command:
+          - /code/bootstrap
+        port: 9000
+      environmentVariables:
+        DASHSCOPE_API_KEY: ${env(DASHSCOPE_API_KEY)}
+        QWEN_MODEL: qwen-plus
+        REDIS_URL: ${env(REDIS_URL)}
+        CACHE_ENABLED: "true"
+        CORS_ORIGINS: ${env(CORS_ORIGINS)}
+      code: ./
+      triggers:
+        - triggerName: httpTrigger
+          triggerType: http
+          triggerConfig:
+            authType: anonymous
+            methods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
