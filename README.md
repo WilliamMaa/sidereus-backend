@@ -46,7 +46,9 @@ docker compose up --build
    - `DASHSCOPE_API_KEY`（必填）
    - `CACHE_ENABLED=false`（无 Redis 时可直接这样）
    - `CORS_ORIGINS`（前端域名）
-5. HTTP 触发器匿名访问 → 把公网 HTTPS 地址给前端 `NEXT_PUBLIC_API_URL`
+5. HTTP 触发器开启 **Basic Auth**（用户名/密码在 FC 控制台配置）
+6. 公网地址：`https://sidereu-backend-sqtlfffqho.cn-beijing.fcapp.run`
+7. 前端用服务端环境变量 `FC_BASE_URL` + `FC_BASIC_AUTH_USER` / `FC_BASIC_AUTH_PASSWORD` 调用（见 `docs/FRONTEND.md`）
 
 ## 架构说明
 

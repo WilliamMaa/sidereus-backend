@@ -20,17 +20,46 @@ POST /api/resume/match   →  拿到匹配评分（需先有 resume_id）
 
 ## 2. 环境变量
 
-前端项目（Vercel / 本地）需配置：
+### 本地联调（无 Basic Auth）
 
 ```env
-# 后端 API 根地址，不要带末尾斜杠
 NEXT_PUBLIC_API_URL=http://localhost:9000
 ```
 
-部署后改为 FC 公网地址，例如：
+### 线上 FC（有 Basic Auth）
+
+生产地址：
+
+```
+https://sidereu-backend-sqtlfffqho.cn-beijing.fcapp.run
+```
+
+FC 网关开启了 **HTTP Basic Auth**（在 FC 控制台配置用户名/密码，应用代码不校验）。
+
+前端 / Vercel 建议用**服务端环境变量**（不要用 `NEXT_PUBLIC_`，否则会进浏览器）：
 
 ```env
-NEXT_PUBLIC_API_URL=https://xxx.cn-hangzhou.fc.aliyuncs.com
+FC_BASE_URL=https://sidereu-backend-sqtlfffqho.cn-beijing.fcapp.run
+FC_BASIC_AUTH_USER=<FC 控制台里设的用户名>
+FC_BASIC_AUTH_PASSWORD=<FC 控制台里设的密码>
+```
+
+所有请求需带请求头：
+
+```
+Authorization: Basic base64(username:password)
+```
+
+推荐模式：浏览器只打 Next.js 自己的 `/api/*`，由服务端带 Basic Auth 转发到 FC，避免账号密码暴露在前端包里。
+
+本地直连 FC 测试示例（PowerShell）：
+
+```powershell
+$user = $env:FC_BASIC_AUTH_USER
+$pass = $env:FC_BASIC_AUTH_PASSWORD
+$pair = "${user}:${pass}"
+$b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($pair))
+curl.exe -sS -H "Authorization: Basic $b64" "$env:FC_BASE_URL/health"
 ```
 
 ---
@@ -291,9 +320,22 @@ export interface ApiError {
 ## 7. API 封装示例
 
 ```typescript
-// lib/api.ts
+// lib/api.ts （服务端 / Route Handler 内调用 FC 时使用）
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:9000";
+const API_URL =
+  process.env.FC_BASE_URL ??
+  process.env.NEXT_PUBLIC_API_URL ??
+  "http://localhost:9000";
+
+function authHeaders(extra: HeadersInit = {}): HeadersInit {
+  const user = process.env.FC_BASIC_AUTH_USER;
+  const pass = process.env.FC_BASIC_AUTH_PASSWORD;
+  const headers: Record<string, string> = { ...(extra as Record<string, string>) };
+  if (user && pass) {
+    headers.Authorization = `Basic ${Buffer.from(`${user}:${pass}`).toString("base64")}`;
+  }
+  return headers;
+}
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -304,16 +346,17 @@ async function handleResponse<T>(res: Response): Promise<T> {
 }
 
 export async function checkHealth() {
-  const res = await fetch(`${API_URL}/health`);
+  const res = await fetch(`${API_URL}/health`, { headers: authHeaders() });
   return handleResponse<{ status: string; redis: string }>(res);
 }
 
-export async function uploadResume(file: File) {
+export async function uploadResume(file: File | Blob, filename = "resume.pdf") {
   const form = new FormData();
-  form.append("file", file);
+  form.append("file", file, filename);
 
   const res = await fetch(`${API_URL}/api/resume/upload`, {
     method: "POST",
+    headers: authHeaders(),
     body: form,
   });
   return handleResponse<import("./types").ResumeUploadResponse>(res);
@@ -322,7 +365,7 @@ export async function uploadResume(file: File) {
 export async function matchResume(resumeId: string, jobDescription: string) {
   const res = await fetch(`${API_URL}/api/resume/match`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({
       resume_id: resumeId,
       job_description: jobDescription,
