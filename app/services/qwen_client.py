@@ -53,16 +53,34 @@ def _ensure_api_key() -> None:
 
 def _call_qwen(prompt: str) -> str:
     _ensure_api_key()
-    response = Generation.call(
-        model=settings.qwen_model,
-        messages=[{"role": "user", "content": prompt}],
-        result_format="message",
-    )
-    if response.status_code != 200:
-        raise RuntimeError(f"DashScope API 错误: {response.code} - {response.message}")
+    logger.info("dashscope call model=%s prompt_len=%s", settings.qwen_model, len(prompt))
+    try:
+        response = Generation.call(
+            model=settings.qwen_model,
+            messages=[{"role": "user", "content": prompt}],
+            result_format="message",
+        )
+    except Exception:
+        logger.exception("dashscope Generation.call raised")
+        raise
 
-    content = response.output.choices[0].message.content
-    return content.strip()
+    status = getattr(response, "status_code", None)
+    code = getattr(response, "code", None)
+    message = getattr(response, "message", None)
+    logger.info("dashscope response status=%s code=%s message=%s", status, code, message)
+
+    if status != 200:
+        raise RuntimeError(f"DashScope API 错误: {code} - {message}")
+
+    try:
+        content = response.output.choices[0].message.content
+    except Exception:
+        logger.exception("dashscope unexpected response shape: %s", response)
+        raise RuntimeError("DashScope 返回结构异常，无法读取 content") from None
+
+    text = (content or "").strip()
+    logger.info("dashscope content_len=%s preview=%s", len(text), text[:200].replace("\n", " "))
+    return text
 
 
 def _parse_json_from_response(text: str) -> dict[str, Any]:
@@ -70,14 +88,21 @@ def _parse_json_from_response(text: str) -> dict[str, Any]:
     fence = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
     if fence:
         text = fence.group(1).strip()
-    return json.loads(text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        logger.error("json parse failed, raw(first 800)=%s", text[:800])
+        raise
 
 
 def extract_resume_info(resume_text: str) -> ExtractedInfo:
     truncated = resume_text[:12000]
     prompt = EXTRACT_PROMPT.format(resume_text=truncated)
     raw = _call_qwen(prompt)
-    data = _parse_json_from_response(raw)
+    try:
+        data = _parse_json_from_response(raw)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"AI 返回非 JSON: {exc}") from exc
 
     return ExtractedInfo(
         basic=BasicInfo.model_validate(data.get("basic", {})),
@@ -108,7 +133,10 @@ def match_resume(job_description: str, extracted: ExtractedInfo) -> tuple[list[s
     resume_json = json.dumps(extracted.model_dump(), ensure_ascii=False)
     prompt = MATCH_PROMPT.format(job_description=job_description[:4000], resume_json=resume_json)
     raw = _call_qwen(prompt)
-    data = _parse_json_from_response(raw)
+    try:
+        data = _parse_json_from_response(raw)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"AI 返回非 JSON: {exc}") from exc
 
     keywords = data.get("matched_keywords", []) + data.get("missing_keywords", [])
     job_keywords = list(dict.fromkeys(str(k) for k in keywords))[:15]

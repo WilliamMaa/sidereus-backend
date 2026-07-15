@@ -1,24 +1,61 @@
-from typing import Optional
+from typing import Annotated, Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, BeforeValidator, Field
+
+
+def _as_optional_str(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+        return text if text else None
+    if isinstance(value, bool):
+        return str(value)
+    if isinstance(value, (int, float)):
+        # 5 -> "5", 5.0 -> "5"
+        if isinstance(value, float) and value.is_integer():
+            return str(int(value))
+        return str(value)
+    return str(value)
+
+
+def _as_str_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        text = value.strip()
+        return [text] if text else []
+    if isinstance(value, list):
+        result: list[str] = []
+        for item in value:
+            text = _as_optional_str(item)
+            if text:
+                result.append(text)
+        return result
+    text = _as_optional_str(value)
+    return [text] if text else []
+
+
+OptionalStr = Annotated[Optional[str], BeforeValidator(_as_optional_str)]
+StrList = Annotated[list[str], BeforeValidator(_as_str_list)]
 
 
 class BasicInfo(BaseModel):
-    name: Optional[str] = None
-    phone: Optional[str] = None
-    email: Optional[str] = None
-    address: Optional[str] = None
+    name: OptionalStr = None
+    phone: OptionalStr = None
+    email: OptionalStr = None
+    address: OptionalStr = None
 
 
 class JobInfo(BaseModel):
-    job_intention: Optional[str] = Field(None, description="求职意向")
-    expected_salary: Optional[str] = Field(None, description="期望薪资")
+    job_intention: OptionalStr = Field(None, description="求职意向")
+    expected_salary: OptionalStr = Field(None, description="期望薪资")
 
 
 class BackgroundInfo(BaseModel):
-    work_years: Optional[str] = Field(None, description="工作年限")
-    education: Optional[str] = Field(None, description="学历背景")
-    projects: Optional[list[str]] = Field(default_factory=list, description="项目经历")
+    work_years: OptionalStr = Field(None, description="工作年限")
+    education: OptionalStr = Field(None, description="学历背景")
+    projects: StrList = Field(default_factory=list, description="项目经历")
 
 
 class ExtractedInfo(BaseModel):
