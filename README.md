@@ -33,28 +33,20 @@ docker compose up --build
 
 ## 部署到阿里云 FC
 
-### 方式一：Custom Runtime（代码包）
+**地域：华北2（北京）`cn-beijing`**
 
-1. 安装 [Serverless Devs](https://docs.serverless-devs.com/)
-2. 配置阿里云账号：`s config add`
-3. 设置环境变量后部署：
+推荐 **自定义容器**，详细步骤见：[docs/DEPLOY.md](docs/DEPLOY.md)
 
-```bash
-export DASHSCOPE_API_KEY=sk-xxx
-export REDIS_URL=redis://your-redis:6379/0
-export CORS_ORIGINS=https://your-frontend.vercel.app
+简要流程：
 
-s deploy
-```
-
-FC 会执行 `bootstrap` 启动 uvicorn，监听 **9000** 端口。
-
-### 方式二：自定义容器
-
-```bash
-docker build -t sidereus-backend .
-# 推送至阿里云 ACR，在 FC 控制台创建容器函数，端口 9000
-```
+1. 开通 FC + ACR（北京）
+2. `docker build` → 推送到 `registry.cn-beijing.aliyuncs.com/...`
+3. FC 创建「容器镜像」函数，端口 **9000**，超时 **120s**
+4. 环境变量至少配：
+   - `DASHSCOPE_API_KEY`（必填）
+   - `CACHE_ENABLED=false`（无 Redis 时可直接这样）
+   - `CORS_ORIGINS`（前端域名）
+5. HTTP 触发器匿名访问 → 把公网 HTTPS 地址给前端 `NEXT_PUBLIC_API_URL`
 
 ## 架构说明
 

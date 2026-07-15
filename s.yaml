@@ -3,7 +3,9 @@ name: sidereus-backend
 access: default
 
 vars:
-  region: cn-hangzhou
+  region: cn-beijing
+  # ACR 个人版 · 命名空间 mingyu_dev
+  image: crpi-kbillu37fwb6ufae.cn-beijing.personal.cr.aliyuncs.com/mingyu_dev/sidereus-backend:v1
 
 resources:
   sidereus-api:
@@ -12,22 +14,20 @@ resources:
       region: ${vars.region}
       functionName: sidereus-resume-api
       description: AI 智能简历分析 API
-      runtime: custom
-      handler: not-used
+      runtime: custom-container
       timeout: 120
       memorySize: 512
+      cpu: 0.5
+      diskSize: 512
       instanceConcurrency: 10
-      customRuntimeConfig:
-        command:
-          - /code/bootstrap
+      customContainerConfig:
+        image: ${vars.image}
         port: 9000
       environmentVariables:
         DASHSCOPE_API_KEY: ${env(DASHSCOPE_API_KEY)}
         QWEN_MODEL: qwen-plus
-        REDIS_URL: ${env(REDIS_URL)}
-        CACHE_ENABLED: "true"
+        CACHE_ENABLED: ${env(CACHE_ENABLED)}
         CORS_ORIGINS: ${env(CORS_ORIGINS)}
-      code: ./
       triggers:
         - triggerName: httpTrigger
           triggerType: http
